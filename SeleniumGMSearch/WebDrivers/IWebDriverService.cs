@@ -1,17 +1,15 @@
 ﻿using OpenQA.Selenium;
 
-public interface IWebDriverService
+public interface IWebDriverService<T> : IAsyncDisposable
 {
-    IWebElement FindElement(DriverSelector selector, string query);
-    IEnumerable<IWebElement> FindElements(DriverSelector selector, string query);
+    Task<T> FindElement(DriverSelector selector, string query);
+    Task<IEnumerable<T>> FindElements(DriverSelector selector, string query);
 
-    string GetPageSource();
+    Task<string> GetPageSource();
 
-    void Click(IWebElement element);
-    string GetAttribute(IWebElement element, string value);
+    Task Click(T element);
+    Task<string> GetAttribute(T element, string value);
 
-    void ScrollDown(IWebElement element);
-
-    void Close();
-    void Navigate(string url);
+    Task ScrollDown(T element);
+    Task Navigate(string url);
 }

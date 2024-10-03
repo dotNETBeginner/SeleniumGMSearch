@@ -1,8 +1,10 @@
 ﻿using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Interactions;
+using System.Collections.Generic;
 
-public class SeleniumDriverService : IWebDriverService
+public class SeleniumDriverService<T> : IWebDriverService<T> where T : IWebElement
+    
 {
     private readonly IWebDriver _driver;
     //private WebDriverWait wait;
@@ -27,49 +29,49 @@ public class SeleniumDriverService : IWebDriverService
         //_driver.Manage().Window.Maximize();
     }
 
-    public IWebElement FindElement(DriverSelector selector, string query)
+    public async Task<T> FindElement(DriverSelector selector, string query)
     {
         var result = _driver.FindElement(SelectorsMapper.SelectorMapping[selector](query));
-        return result;
+        return (T)result;
     }
 
-    public IEnumerable<IWebElement> FindElements(DriverSelector selector, string query)
+    public async Task<IEnumerable<T>> FindElements(DriverSelector selector, string query)
     {
-        var result = _driver.FindElements(SelectorsMapper.SelectorMapping[selector](query));
-        return result;
+        var result = await Task.Run(() => _driver.FindElements(SelectorsMapper.SelectorMapping[selector](query)));
+        return (IEnumerable<T>)result;
     }
 
-    public void Navigate(string url)
+    public async Task Navigate(string url)
     {
-        _driver.Navigate().GoToUrl(url);
+        await Task.Run(() => _driver.Navigate().GoToUrl(url));
         Thread.Sleep(3000);
         //_driver.FindElement(By.XPath("//*[@id=\"yDmH0d\"]/c-wiz/div/div/div/div[2]/div[1]/div[3]/div[1]/div[1]/form[2]/div/div/button/span")).Click();
     }
 
-    public string GetAttribute(IWebElement element, string value)
+    public Task<string> GetAttribute(T element, string value)
     {
-        return element.GetAttribute(value);
+        return Task.Run(() => element.GetAttribute(value));
     }
 
-    public void Close()
-    { 
-        _driver.Close(); 
-    }
-
-    public void Click(IWebElement element)
+    public async Task Click(T element)
     {
-        element.Click();
+        await Task.Run(() => element.Click());
         Thread.Sleep(1500);
     }
 
-    public string GetPageSource()
+    public async Task<string> GetPageSource()
     {
-        return _driver.PageSource;
+        return await Task.Run(() => _driver.PageSource);
     }
 
-    public void ScrollDown(IWebElement element)
+    public async Task ScrollDown(T element)
     {
-        ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true);", element);
+        await Task.Run(() => ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true);", element));
         //((IJavaScriptExecutor)_driver).ExecuteScript("window.scrollBy(0, 1000);");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await Task.Run(() => _driver.Close());
     }
 }

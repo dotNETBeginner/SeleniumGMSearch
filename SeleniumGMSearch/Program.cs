@@ -6,13 +6,16 @@ using System.Text.RegularExpressions;
 using static MAP_KEYS.LANG_WRAP_KEY;
 using static MAP_KEYS.TECH_KEY;
 using static MAP_KEYS.STR_FORMAT_KEY;
+using Microsoft.Playwright;
+using SeleniumGMSearch;
 class Program
 {
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
-        var scraper = new Scraper(new SeleniumDriverService(), new AgilityDOMService(), new ConsoleUserInteractor(), new EnglishLanguageWrapper());
+        await using var scraper = new Scraper<IElementHandle>(new PlaywrightDriverService<IElementHandle>(), 
+            new AgilityDOMService(), new ConsoleUserInteractor(), new EnglishLanguageWrapper(), new ZipCodeFinder());
 
-        var results = scraper.ScrapeData();
+        var results = await scraper.ScrapeData();
 
         foreach (var business in results)
         {
@@ -20,10 +23,8 @@ class Program
         }
 
         Console.WriteLine(results.Count);
-        Thread.Sleep(10000000);
-        scraper.Close();
+        Thread.Sleep(1000);
 
-        
     }
 
 
@@ -60,7 +61,7 @@ public class ConsoleUserInteractor : IUserInteractor
 
 
 
-public class Scraper
+public class Scraper<T> : IAsyncDisposable
 {
    
     //private const string ADDRESS_ATTRIBUTE = _languageWrapper.StringPropsMapping["bus_address"];
@@ -71,47 +72,53 @@ public class Scraper
     private const string PLACE_TEMPLATE = "https://www.google.com/maps/place";
 
     private readonly ILanguageWrapper _languageWrapper;
-    private readonly IWebDriverService _driver;
+    private readonly IWebDriverService<T> _driver;
     private readonly IDOMService _domService;
     private readonly IUserInteractor _userInteractor;
-
-    public Scraper(IWebDriverService driver, IDOMService domService, IUserInteractor userInteractor, ILanguageWrapper languageWrapper)
+    private readonly IZipCodeFinder _zipCodeFinder;
+    
+    public Scraper(IWebDriverService<T> driver, IDOMService domService, IUserInteractor userInteractor, ILanguageWrapper languageWrapper, IZipCodeFinder zipCodeFinder)
     {
         _driver = driver;
         _domService = domService;
         _userInteractor = userInteractor;
         _languageWrapper = languageWrapper;
+        _zipCodeFinder = zipCodeFinder;
     }
 
     
 
 
 
-    public List<BusinessInfo> ScrapeData()
+    public async Task<List<BusinessInfo>> ScrapeData() 
     {
         string[] query = _userInteractor.GetInput();
         int quantity = 40;
 
-        _driver.Navigate($"{SEARCH_TEMPLATE}{query[0]}+{query[1]}");
+        await _driver.Navigate($"{SEARCH_TEMPLATE}{query[0]}+{query[1]}");
 
 
 
-        var acceptButton = _driver.FindElement(DriverSelector.XPath, $"//button[contains(@aria-label, '{_languageWrapper.TechPropsMapping[INIT_ACCEPT_KEY]}')]");
+        var acceptButton = await _driver.FindElement(DriverSelector.XPath, $"//button[contains(@aria-label, '{_languageWrapper.TechPropsMapping[INIT_ACCEPT_KEY]}')]");
                                   
-        _driver.Click(acceptButton);
+        await _driver.Click(acceptButton);
 
-        var divToScroll = _driver.FindElement(DriverSelector.XPath, $"//div[contains(@role, 'feed')]");
-        var links = _driver.FindElements(DriverSelector.XPath, $"//a[contains(@href, '{PLACE_TEMPLATE}')]");
+        var divToScroll = await _driver.FindElement(DriverSelector.XPath, $"//div[contains(@role, 'feed')]");
+        var links = await _driver.FindElements(DriverSelector.XPath, $"//a[contains(@href, '{PLACE_TEMPLATE}')]");
         var results = new List<BusinessInfo>();
 
         Thread.Sleep(2000);
-        while(links.Count() < quantity)
+        int prevCount = 0;
+        int count = links.Count();
+        while (links.Count() < quantity && count - prevCount > 0) 
         {
             Console.WriteLine("SCROLLED");
-            _driver.ScrollDown(links.Last());
-            links = _driver.FindElements(DriverSelector.XPath, $"//a[contains(@href, '{PLACE_TEMPLATE}')]");
+            await _driver.ScrollDown(links.Last());
+            links = await _driver.FindElements(DriverSelector.XPath, $"//a[contains(@href, '{PLACE_TEMPLATE}')]");
             Thread.Sleep(2000);
+            prevCount = links.Count();
         }
+        
 
         Console.WriteLine(links.Count());
 
@@ -119,22 +126,23 @@ public class Scraper
         {
             try
             {
-                    _driver.Click(link);
+                await _driver.Click(link);
 
-                _domService.LoadHtml(_driver.GetPageSource());
+                _domService.LoadHtml(await _driver.GetPageSource());
                 var result = new Dictionary<string, string>();
-                DFS(_domService.GetDocumentNode(), result, "data-item-id", _languageWrapper.StringPropsMapping[ADDRESS_ATTRIBUTE_KEY],
+                await DFS(_domService.GetDocumentNode(), result, "data-item-id", _languageWrapper.StringPropsMapping[ADDRESS_ATTRIBUTE_KEY],
                     _languageWrapper.StringPropsMapping[AUTHORITY_ATTRIBUTE_KEY],
                     _languageWrapper.StringPropsMapping[PHONE_ATTRIBUTE_KEY],
                     _languageWrapper.StringPropsMapping[OLOC_ATTRIBUTE_KEY]);
-
+                Thread.Sleep(500);
 
                 //foreach (var node in result)
                 //{
                 //    Console.WriteLine($"Найден элемент с class='my-class': {node.InnerText.Trim()}");
                 //}
 
-                var label = _driver.GetAttribute(link, "aria-label").Replace($"{_languageWrapper.FormatPropsMapping[ADD_TRIM_KEY]}", string.Empty);
+                var label = _driver.GetAttribute(link, "aria-label").Result.Replace($"{_languageWrapper.FormatPropsMapping[ADD_TRIM_KEY]}", string.Empty);
+                var zipCode = _zipCodeFinder.FindZipCode(_languageWrapper.StringPropsMapping[ADDRESS_ATTRIBUTE_KEY]);
 
                 string titleText = label;
                 //Console.WriteLine(titleText);
@@ -143,16 +151,18 @@ public class Scraper
                 {
                     Title = titleText,
                     Phone = result.ContainsKey(_languageWrapper.StringPropsMapping[PHONE_ATTRIBUTE_KEY])
-                    ? result[_languageWrapper.StringPropsMapping[PHONE_ATTRIBUTE_KEY]] : string.Empty,
+                    ? result[_languageWrapper.StringPropsMapping[PHONE_ATTRIBUTE_KEY]].Replace("?","") : string.Empty,
 
                     Address = result.ContainsKey(_languageWrapper.StringPropsMapping[ADDRESS_ATTRIBUTE_KEY])
-                    ? result[_languageWrapper.StringPropsMapping[ADDRESS_ATTRIBUTE_KEY]] : string.Empty,
+                    ? result[_languageWrapper.StringPropsMapping[ADDRESS_ATTRIBUTE_KEY]].Replace("?", "").Replace(zipCode,"") : string.Empty,
+
+                    ZipCode = zipCode,
 
                     CompanyUrl = result.ContainsKey(_languageWrapper.StringPropsMapping[AUTHORITY_ATTRIBUTE_KEY])
-                    ? result[_languageWrapper.StringPropsMapping[AUTHORITY_ATTRIBUTE_KEY]] : string.Empty,
+                    ? result[_languageWrapper.StringPropsMapping[AUTHORITY_ATTRIBUTE_KEY]].Replace("?", "") : string.Empty,
 
                     PlusCode = result.ContainsKey(_languageWrapper.StringPropsMapping[OLOC_ATTRIBUTE_KEY])
-                    ? result[_languageWrapper.StringPropsMapping[OLOC_ATTRIBUTE_KEY]] : string.Empty
+                    ? result[_languageWrapper.StringPropsMapping[OLOC_ATTRIBUTE_KEY]].Replace("?", "") : string.Empty
                 });
 
             }
@@ -166,12 +176,7 @@ public class Scraper
     }
 
 
-    public void Close()
-    {
-        _driver.Close();
-    }
-
-    private void DFS(HtmlNode node, Dictionary<string, string> result, string attribute,params string[] valuesToFind )
+    private async Task DFS(HtmlNode node, Dictionary<string, string> result, string attribute,params string[] valuesToFind )
     {
 
         var dataItemIdValue = node.GetAttributeValue(attribute, "");
@@ -205,10 +210,14 @@ public class Scraper
         // Рекурсивно обходим все дочерние узлы
         foreach (var child in node.ChildNodes)
         {
-            DFS(child, result, attribute, valuesToFind); // Рекурсивный вызов
+            await DFS(child, result, attribute, valuesToFind); // Рекурсивный вызов
         }
     }
 
+    public async ValueTask DisposeAsync()
+    {
+        await _driver.DisposeAsync();
+    }
 }
 
 
@@ -221,6 +230,7 @@ public class BusinessInfo
     public string Industry { get; set; }
     public string Address { get; set; }
     public string CompanyUrl { get; set; }
+    public string ZipCode { get; set; }
 
     public override int GetHashCode()
     {
