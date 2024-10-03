@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.11.35219.272
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SeleniumGMSearch", "SeleniumGMSearch\SeleniumGMSearch.csproj", "{A9CA6D7F-8091-40DE-94C0-C0C8C9A9EDBA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A9CA6D7F-8091-40DE-94C0-C0C8C9A9EDBA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A9CA6D7F-8091-40DE-94C0-C0C8C9A9EDBA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A9CA6D7F-8091-40DE-94C0-C0C8C9A9EDBA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A9CA6D7F-8091-40DE-94C0-C0C8C9A9EDBA}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F06592F2-DB4A-40A6-907F-C98F38AAFF05}
+	EndGlobalSection
+EndGlobal
